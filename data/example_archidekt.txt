@@ -1,0 +1,52 @@
+# Beispiel Archidekt-Format Deckliste
+# Kopiere das in deine data/sample_decklist.txt
+
+# Commander
+1 Atraxa, Praetors' Voice
+
+# Mana Ramp
+1 Sol Ring
+1 Arcane Signet
+1 Command Tower
+1 Mana Crypt
+1 Llanowar Elves
+1 Birds of Paradise
+1 Cultivate
+1 Kodama's Reach
+
+# Card Draw
+1 Rhystic Study
+1 Mystic Remora
+1 Phyrexian Arena
+1 Sylvan Library
+
+# Removal
+1 Swords to Plowshares
+1 Path to Exile
+1 Assassin's Trophy
+1 Beast Within
+
+# Counterspells
+1 Counterspell
+1 Swan Song
+1 Mana Drain
+
+# Board Wipes
+1 Wrath of God
+1 Damnation
+1 Cyclonic Rift
+
+# Tutors
+1 Demonic Tutor
+1 Vampiric Tutor
+1 Worldly Tutor
+
+# Lands
+1 Breeding Pool
+1 Overgrown Tomb
+1 Temple Garden
+1 Hallowed Fountain
+10 Forest
+8 Island
+5 Plains
+5 Swamp
