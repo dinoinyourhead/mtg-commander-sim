@@ -30,9 +30,12 @@ class GameState:
         self.graveyard: list[Card] = []
         
         # Resources
+        # Resources
         self.mana_pool: dict[str, int] = {}
         self.turn_counter: int = 0
-        self.land_played_this_turn: Optional[Card] = None  # Track specific land card
+        self.lands_played_count: int = 0
+        self.land_plays_allowed: int = 1
+        self.land_played_this_turn: Optional[Card] = None # Deprecated but kept for backward compat inside loop logic if needed
         self.cards_played_this_turn: list[Card] = []  # Track all cards played for sickness/tapped checks
         
         # Commander zone (set aside)
@@ -62,7 +65,7 @@ class GameState:
         Returns:
             True if successful, False if land already played or card not in hand
         """
-        if self.land_played_this_turn:
+        if self.lands_played_count >= self.land_plays_allowed:
             return False
         
         if card not in self.hand:
@@ -73,7 +76,9 @@ class GameState:
         
         self.hand.remove(card)
         self.battlefield.append(card)
-        self.land_played_this_turn = card  # Store reference to the land
+        
+        self.lands_played_count += 1
+        self.land_played_this_turn = card  # Update reference to MOST RECENT land
         self.cards_played_this_turn.append(card)
         return True
     
@@ -135,6 +140,8 @@ class GameState:
         """Clear all mana from the mana pool (end of turn)."""
         self.mana_pool = {}
         self.cards_played_this_turn = []
+        self.lands_played_count = 0
+        self.land_plays_allowed = 1 # Reset to default (unless static ability persists? Phase 2.5: Re-calced start of turn)
     
     def can_afford(self, cost: dict[str, int]) -> bool:
         """
@@ -432,103 +439,48 @@ class GameEngine:
         3. Cast most expensive affordable spell
         4. Repeat step 3 until no spells can be cast
         """
-        # Step 1: Play a land
-        lands_in_hand = [card for card in self.state.hand if card.is_land]
-        if lands_in_hand and not self.state.land_played_this_turn:
-            land = lands_in_hand[0]  # Just play first land
-            self.state.play_land(land)
-            
-            enters_tapped = self._check_enters_tapped(land)
-            
-            self._log_event("play_land", {
-                "card": land.name,
-                "enters_tapped": enters_tapped
-            })
-            if self.verbose:
-                tapped_marker = " (enters tapped)" if enters_tapped else ""
-                print(f"🌳 Played land: {land.name}{tapped_marker}")
-        
-        # Step 2 & 3: Dynamic Loop (Tap -> Cast -> Tap -> Cast ...)
-        # This allows using mana rocks (like Sol Ring) immediately after casting them
         
         # Track objects tapped this turn/phase to prevent double dipping
         # Note: Since we only do main phase in Phase 2, this acts as "Tapped status"
         tapped_objects = set() 
         
         while True:
+            # 0. Update Board State Limits (e.g. Exploration)
+            # Count EXTRA_LAND_DROP tags on battlefield
+            extra_drops = 0
+            for card in self.state.battlefield:
+                if "EXTRA_LAND_DROP" in card.tags:
+                    extra_drops += 1
+            
+            # Base is 1 + extras
+            self.state.land_plays_allowed = 1 + extra_drops
+        
+            # 1. Play Land (if allowed and available)
+            land_played_this_loop = False
+            if self.state.lands_played_count < self.state.land_plays_allowed:
+                lands_in_hand = [card for card in self.state.hand if card.is_land]
+                if lands_in_hand:
+                    land = lands_in_hand[0] # Greedy: Play first available
+                    if self.state.play_land(land):
+                        land_played_this_loop = True
+                        enters_tapped = self._check_enters_tapped(land)
+                        self._log_event("play_land", {
+                            "card": land.name,
+                            "enters_tapped": enters_tapped,
+                            "count": self.state.lands_played_count,
+                            "max": self.state.land_plays_allowed
+                        })
+                        if self.verbose:
+                            tapped_marker = " (enters tapped)" if enters_tapped else ""
+                            print(f"🌳 Played land ({self.state.lands_played_count}/{self.state.land_plays_allowed}): {land.name}{tapped_marker}")
+
             mana_added_this_loop = False
             
-            # Lands
-            lands_on_battlefield = [c for c in self.state.battlefield if c.is_land]
-            untapped_lands = []
-            for land in lands_on_battlefield:
-                if id(land) in tapped_objects:
-                    continue
-                
-                # Check eligibility
-                # Logic: Is it valid source?
-                
-                # CRITICAL: Fetch Lands (Evolving Wilds) generally do NOT produce mana.
-                if "FETCH_LAND" in land.tags:
-                    continue
-                
-                # Check if it entered tapped this turn (e.g. Fetched Land, Evolving Wilds itself)
-                # We must check ALL cards played this turn, not just property land_played_this_turn
-                if land in self.state.cards_played_this_turn and "TAPPED_ENTRY" in land.tags:
-                     continue
-                     
-                # Fallback: Special check for the played land if tags missing for some reason (shouldn't happen with updated logic)
-                if land == self.state.land_played_this_turn:
-                     if self._check_enters_tapped(land):
-                          continue
-                
-                untapped_lands.append(land)
-        
-            for land in untapped_lands:
-                self.state.add_mana({"colorless": 1})
-                tapped_objects.add(id(land))
-                mana_added_this_loop = True
+            # Lands & Rocks Mana Generation
+            mana_added_this_loop = self._generate_available_mana(tapped_objects)
             
-            # Artifacts (Mana Rocks)
-            # Use MANA_ROCK tag to distinguish from generic RAMP (like Wayfarer's Bauble)
-            mana_rocks = [c for c in self.state.battlefield if "MANA_ROCK" in c.tags and "ARTIFACT" in c.tags]
-            active_artifacts = {}
-            for artifact in mana_rocks:
-                if id(artifact) in tapped_objects:
-                    continue
-
-                # Check eligibility (Summoning Sickness / Tapped Entry)
-                if artifact in self.state.cards_played_this_turn:
-                    # Generic check for any permanent entered tapped
-                    if "TAPPED_ENTRY" in artifact.tags:
-                        continue
-                    # If it's a creature, assume summoning sickness (no haste support yet)
-                    if "Creature" in artifact.type_line:
-                        continue
-                
-                self.state.add_mana({"colorless": 1})
-                tapped_objects.add(id(artifact))
-                active_artifacts[artifact.name] = active_artifacts.get(artifact.name, 0) + 1
-                mana_added_this_loop = True
-                
-            # Log generation (initial only? No, log incremental?)
-            # The original design logged ONCE.
-            # We should probably aggregate or log increments.
-            # For simplicity avoiding spam: Log only if we added mana AND it's the first pass?
-            # Or log "generate_mana" events incrementally.
-            if mana_added_this_loop:
-                 total_mana = self.state.get_total_mana()
-                 # Only log if we generated significant mana or verbose?
-                 # Actually the previous log logic was per turn.
-                 # Let's log incremental generation events.
-                 if active_artifacts or untapped_lands:
-                     self._log_event("generate_mana", {
-                        "available_mana_from_permanents": total_mana,
-                        "sources": {"lands": len(untapped_lands), "artifacts": active_artifacts}
-                     })
-                     if self.verbose and (len(untapped_lands) > 0 or active_artifacts):
-                        artifact_str = f", Artifacts: {active_artifacts}" if active_artifacts else ""
-                        print(f"💎 Generated incremental mana (Lands: {len(untapped_lands)}{artifact_str})")
+            # Cast Spells
+            spell_cast_this_loop = False
 
             # Cast Spells
             spell_cast_this_loop = False
@@ -555,17 +507,18 @@ class GameEngine:
                          print(f"✨ Cast: {spell.name} (CMC {spell.cmc}) {dest}")
                     
                     # DYNAMIC MANA FIX (Sol Ring)
-                    # Use MANA_ROCK tag
                     if spell.is_permanent and "MANA_ROCK" in spell.tags and "ARTIFACT" in spell.tags:
                         if "TAPPED_ENTRY" not in spell.tags:
-                            # New mana source available! Tap it immediately.
-                            # Logic handled by next loop iteration! 
-                            # But logging helpful.
-                            if self.verbose:
+                             if self.verbose:
                                 print(f"   ⚡ Tapped new {spell.name} for 1 mana (next loop)")
+                    
+                    # RAMP SPELL LOGIC (Rampant Growth)
+                    if "RAMP_FETCH" in spell.tags:
+                        self._resolve_ramp_spell(spell)
+
             
             # Break conditions
-            if not mana_added_this_loop and not spell_cast_this_loop:
+            if not mana_added_this_loop and not spell_cast_this_loop and not land_played_this_loop:
                 # Try to crack Fetch Lands before giving up?
                 # This could change available mana (unlikely, usually fetch land enters tapped)
                 # But it changes deck composition (shuffle).
@@ -654,6 +607,123 @@ class GameEngine:
                  
         return False
     
+    def _generate_available_mana(self, tapped_objects: set) -> bool:
+        """
+        Generate mana from all available sources (Lands, Rocks).
+        
+        Args:
+            tapped_objects: Set of object IDs that are already tapped.
+            
+        Returns:
+            True if any mana was added.
+        """
+        mana_added = False
+        
+        # 1. Lands
+        lands_on_battlefield = [c for c in self.state.battlefield if c.is_land]
+        untapped_lands = []
+        
+        for land in lands_on_battlefield:
+            if id(land) in tapped_objects:
+                continue
+            
+            # CRITICAL: Fetch Lands (Evolving Wilds) generally do NOT produce mana.
+            if "FETCH_LAND" in land.tags:
+                continue
+            
+            # Check if it entered tapped this turn
+            if land in self.state.cards_played_this_turn and "TAPPED_ENTRY" in land.tags:
+                    continue
+                    
+            # Fallback: Special check for the played land if tags missing
+            if land == self.state.land_played_this_turn:
+                    if self._check_enters_tapped(land):
+                        continue
+            
+            untapped_lands.append(land)
+    
+        for land in untapped_lands:
+            self.state.add_mana({"colorless": 1})
+            tapped_objects.add(id(land))
+            mana_added = True
+        
+        # 2. Artifacts (Mana Rocks)
+        mana_rocks = [c for c in self.state.battlefield if "MANA_ROCK" in c.tags and "ARTIFACT" in c.tags]
+        active_artifacts = {}
+        
+        for artifact in mana_rocks:
+            if id(artifact) in tapped_objects:
+                continue
+
+            # Check eligibility (Summoning Sickness / Tapped Entry)
+            if artifact in self.state.cards_played_this_turn:
+                if "TAPPED_ENTRY" in artifact.tags:
+                    continue
+                if "Creature" in artifact.type_line:
+                    continue
+            
+            self.state.add_mana({"colorless": 1})
+            tapped_objects.add(id(artifact))
+            active_artifacts[artifact.name] = active_artifacts.get(artifact.name, 0) + 1
+            mana_added = True
+            
+        # Logging
+        if mana_added:
+                total_mana = self.state.get_total_mana()
+                if active_artifacts or untapped_lands:
+                    self._log_event("generate_mana", {
+                    "available_mana_from_permanents": total_mana,
+                    "sources": {"lands": len(untapped_lands), "artifacts": active_artifacts}
+                    })
+                    if self.verbose and (len(untapped_lands) > 0 or active_artifacts):
+                        artifact_str = f", Artifacts: {active_artifacts}" if active_artifacts else ""
+                        print(f"💎 Generated incremental mana (Lands: {len(untapped_lands)}{artifact_str})")
+                        
+        return mana_added
+
+    def _resolve_ramp_spell(self, spell: Card):
+        """
+        Execute effect of a Ramp Spell (e.g. Rampant Growth).
+        Search library for basic land -> Battlefield Tapped -> Shuffle.
+        """
+        # Logic: Search first Basic Land
+        target_land = None
+        for card in self.state.library:
+            if card.is_land and ("Basic" in card.type_line or any(x in card.type_line for x in ["Mountain", "Island", "Plains", "Swamp", "Forest"])):
+                    target_land = card
+                    break
+        
+        if target_land:
+            self.state.library.remove(target_land)
+            self.state.battlefield.append(target_land)
+            self.state.cards_played_this_turn.append(target_land)
+            
+            # Should enter tapped? Most ramp spells say "tapped".
+            # Assume YES for generic RAMP_FETCH unless specific logic added later.
+            if "tapped" in spell.oracle_text.lower():
+                 if "TAPPED_ENTRY" not in target_land.tags:
+                     target_land.tags.append("TAPPED_ENTRY")
+            else:
+                 # "Put it onto the battlefield" (untapped, e.g. Three Visits)
+                 # If Oracle text doesn't say tapped, it's untapped!
+                 # Remove TAPPED_ENTRY if it had it (unlikely for basic land)
+                 # But we just leave it alone.
+                 pass
+            
+            # Shuffle
+            import random
+            random.shuffle(self.state.library)
+            
+            # Log
+            self._log_event("spell_effect", {
+                "source": spell.name,
+                "effect": f"Ramped {target_land.name}",
+                "entered_tapped": "tapped" in spell.oracle_text.lower()
+            })
+            if self.verbose:
+                tapped_str = " (tapped)" if "tapped" in spell.oracle_text.lower() else ""
+                print(f"   🚀 Ramp Effect: Fetched {target_land.name}{tapped_str}")
+
     def run_turns(self, n: int):
         """
         Run N turns of the game.

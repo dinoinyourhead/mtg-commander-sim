@@ -29,6 +29,8 @@ class CardTag(str, Enum):
     # New specific tags
     MANA_ROCK = "MANA_ROCK"  # Artifact that taps for mana directly
     FETCH_LAND = "FETCH_LAND" # Land that searches for another land (Evolving Wilds)
+    EXTRA_LAND_DROP = "EXTRA_LAND_DROP" # Allows playing an additional land each turn
+    RAMP_FETCH = "RAMP_FETCH" # Spell that searches land to battlefield (Rampant Growth)
 
 
 # Static mappings for well-known cards
@@ -204,6 +206,19 @@ def assign_tags(card_name: str, type_line: str, oracle_text: str) -> list[str]:
     if "Land" in type_line and "search your library" in oracle_lower and "sacrifice" in oracle_lower:
         # Avoid tagging Ramp spells as Fetch Lands (already filtered by Land type check above)
         tags.add(CardTag.FETCH_LAND)
+
+    # Extra Land Drop Detection
+    # "Play an additional land" or "Play one additional land"
+    if "play an additional land" in oracle_lower or "play one additional land" in oracle_lower:
+        tags.add(CardTag.EXTRA_LAND_DROP)
+
+    # Ramp Spell (Fetch-to-Battlefield) Detection
+    # Logic: Search library + put onto battlefield. 
+    # Must NOT be a Land (that's FETCH_LAND).
+    if "Land" not in type_line and "search your library" in oracle_lower and "put" in oracle_lower and "onto the battlefield" in oracle_lower:
+        tags.add(CardTag.RAMP_FETCH)
+
+
 
 
     # Land-Specific Conditional Logic

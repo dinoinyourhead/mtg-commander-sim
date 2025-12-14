@@ -1,71 +1,91 @@
-# Commander: Shirei, Shizo's Caretaker
+# Commander: Yuma, Proud Protector
 
-1 Altar of Dementia
+1 Aftermath Analyst
+1 Amulet of Vigor
+1 Ancient Greenwarden
+1 Annie Joins Up
+1 Arboreal Grazer
 1 Arcane Signet
-1 Bone Splinters
-1 Call the Bloodline
-1 Deathbloom Thallid
-1 Defiant Salvager
-1 Doomed Dissenter
-1 Dreadmalkin
+1 Aura Shards
+1 Avenger of Zendikar
+1 Beast Within
+1 Boros Charm
+1 Bristling Backwoods
+1 Brokers Hideout
+1 Cabaretti Courtyard
+1 Cactus Preserve
+1 Cathars' Crusade
+1 Command Tower
+1 Conduit of Worlds
+1 Conduit Pylons
+1 Constant Mists
+1 Creosote Heath
+1 Crop Rotation
+1 Crucible of Worlds
+1 Desert of the Indomitable
+1 Desert of the True
+1 Dune Chanter
 1 Dunes of the Dead
-1 Evolving Wilds
-1 Fain, the Broker
-1 Festering Mummy
-1 Genesis Chamber
-1 Ghoulish Procession
-1 Gisa's Bidding
-1 Gleaming Barrier
-1 Gonti, Lord of Luxury
-1 Haunt of the Dead Marshes
-1 Hired Poisoner
-1 Lazotep Reaver
-1 Maggot Carrier
-1 Manakin
-1 Marsh Casualties
-1 Millikin
-1 Mirkwood Bats
-1 Mortuary Mire
-1 Myr Sire
-1 Necrotic Wound
-1 Nekrataal
-1 Night's Whisper
-1 Nihil Spellbomb
-1 Ogre Slumlord
-1 Perpetual Timepiece
-1 Persistent Specimen
-1 Pilfering Imp
-1 Pilgrim's Eye
-1 Plague Mare
-1 Ravenous Rats
-1 Razaketh's Rite
-1 Ruthless Knave
-1 Sanitarium Skeleton
+1 Eldrazi Monument
+1 Elemental Bond
+1 Elvish Reclaimer
+1 Enter the Unknown
+1 Escape Tunnel
+1 Exploration
+1 Exploration Broodship
+1 Fabled Passage
+1 Felidar Retreat
+1 Flagstones of Trokair
+8 Forest
+1 Ghost Quarter
+1 Grasping Dunes
+1 Harrow
+1 Hashep Oasis
+1 Hazezon, Shaper of Sand
+1 Heroic Intervention
+1 Hour of Promise
+1 Larval Scoutlander
+1 Life from the Loam
+1 Mirage Mesa
+1 Momentous Fall
+3 Mountain
+1 Nature's Lore
+1 Once Upon a Time
+1 Overwhelming Stampede
+1 Path to Exile
+1 Perennial Behemoth
+4 Plains
+1 Rampaging Baloths
+1 Ramunap Excavator
+1 Ramunap Ruins
+1 Realms Uncharted
+1 Renegade Rallier
+1 Riftstone Portal
+1 Roiling Regrowth
+1 Sakura-Tribe Scout
+1 Satyr Wayfinder
 1 Scavenger Grounds
-1 Severed Strands
-1 Shadow Alley Denizen
-1 Shirei, Shizo's Caretaker
-1 Sifter of Skulls
-1 Sinister Concoction
-1 Skirsdag High Priest
-1 Skittering Surveyor
-1 Skullclamp
-1 Skulltap
+1 Scute Swarm
+1 Shefet Dunes
+1 Sheltered Thicket
+1 Sheltering Landscape
+1 Skyshroud Ranger
 1 Sol Ring
-1 Spark Harvest
-1 Spark Reaper
-1 Stab Wound
-32 Swamp
+1 Spectator Seating
+1 Splendid Reclamation
+1 Sporocyst
+1 Sun Titan
+1 Sunscorched Desert
+1 Sunscorched Divide
 1 Swiftfoot Boots
-1 Terramorphic Expanse
-1 Thallid Soothsayer
-1 Tragic Slip
-1 Underhanded Designs
-1 Vat of Rebirth
-1 Vermin Gorger
-1 Vicious Offering
-1 War Room
-1 Wayfarer's Bauble
-1 Weaponcraft Enthusiast
-1 Whispersilk Cloak
-1 Workshop Assistant
+1 Titania, Protector of Argoth
+1 Triumph of the Hordes
+1 Undergrowth Recon
+1 Valakut Exploration
+1 Wrenn and Seven
+1 Wrenn and Six
+1 Yavimaya, Cradle of Growth
+1 Yuma, Proud Protector
+1 Zendikar's Roil
+1 Zuran Orb
+

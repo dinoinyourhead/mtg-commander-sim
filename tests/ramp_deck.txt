@@ -1,0 +1,13 @@
+
+# Commander
+1 Omnath, Locus of Mana
+
+# Ramp Spells
+4 Rampant Growth
+4 Cultivate
+4 Kodama's Reach
+4 Farseek
+4 Nature's Lore
+
+# Lands
+20 Forest
