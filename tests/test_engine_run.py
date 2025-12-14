@@ -54,13 +54,19 @@ async def main():
         default=None,
         help="Commander name (overrides decklist)"
     )
+    parser.add_argument(
+        "--deck", "-d",
+        type=str,
+        default="data/sample_decklist.txt",
+        help="Path to decklist file"
+    )
     
     args = parser.parse_args()
     
     print_header()
     
     # Load deck
-    decklist_path = Path(__file__).parent.parent / "data" / "sample_decklist.txt"
+    decklist_path = Path(__file__).parent.parent / args.deck
     
     if not decklist_path.exists():
         print(f"❌ Error: Decklist not found at {decklist_path}")

@@ -28,6 +28,7 @@ class CardTag(str, Enum):
     
     # New specific tags
     MANA_ROCK = "MANA_ROCK"  # Artifact that taps for mana directly
+    FETCH_LAND = "FETCH_LAND" # Land that searches for another land (Evolving Wilds)
 
 
 # Static mappings for well-known cards
@@ -166,7 +167,8 @@ def assign_tags(card_name: str, type_line: str, oracle_text: str) -> list[str]:
     # Pattern: "{T}: Add" or "Add {X}"
     # Valid: "{T}: Add {R}", "Add one mana", "Add three mana"
     # Invalid: "Add a Counter"
-    if re.search(r"add\s+.*(\{.*\})|add\s+(one|two|three|any)\s+mana", oracle_lower):
+    # CRITICAL: Exclude Lands, as they are handled separately and we don't want double counting in stats
+    if "Land" not in type_line and re.search(r"add\s+.*(\{.*\})|add\s+(one|two|three|any)\s+mana", oracle_lower):
         tags.add(CardTag.MANA_ROCK)
         tags.add(CardTag.RAMP) # All rocks are ramp
     
@@ -196,6 +198,13 @@ def assign_tags(card_name: str, type_line: str, oracle_text: str) -> list[str]:
     # "enters the battlefield tapped" OR "this land enters tapped" OR just "enters tapped" OR "this artifact enters tapped"
     if re.search(r"(this\s+(land|artifact)\s+)?(enters?|enter)\s+(the\s+battlefield\s+)?tapped", oracle_text, re.IGNORECASE):
         tags.add(CardTag.TAPPED_ENTRY)
+
+    # Fetch Land Detection (Evolving Wilds, Brokers Hideout, etc.)
+    # Must be Land. Must "Search library". Must "Sacrifice".
+    if "Land" in type_line and "search your library" in oracle_lower and "sacrifice" in oracle_lower:
+        # Avoid tagging Ramp spells as Fetch Lands (already filtered by Land type check above)
+        tags.add(CardTag.FETCH_LAND)
+
 
     # Land-Specific Conditional Logic
     if "Land" in type_line:

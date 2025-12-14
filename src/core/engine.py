@@ -175,16 +175,27 @@ class GameEngine:
     allowing us to test how well a deck can execute its game plan.
     """
     
-    def __init__(self, verbose: bool = False):
+    def __init__(self, verbose: bool = False, export_mode: str = "detailed"):
         """
         Initialize game engine.
         
         Args:
             verbose: If True, print detailed turn-by-turn logs
+            export_mode: "detailed" (default) saves logs to json, "summary" skips logs for speed
         """
         self.state = GameState()
         self.verbose = verbose
+        self.export_mode = export_mode
         self.game_log: list[dict] = []  # Track all game events for export
+        
+        # Monte Carlo specific stats
+        self._mc_stats = {
+            "mana_turn_4": 0,
+            "lands_turn_4": 0, # Pure land count for verification
+            "hand_empty_turn": None,
+            "final_lands": 0,
+            "final_turn": 0
+        }
     
     def _log_event(self, event_type: str, details: dict):
         """
@@ -194,12 +205,13 @@ class GameEngine:
             event_type: Type of event (e.g., "draw", "play_land", "cast_spell")
             details: Event details
         """
-        event = {
-            "turn": self.state.turn_counter,
-            "event": event_type,
-            **details
-        }
-        self.game_log.append(event)
+        if self.export_mode == "detailed":
+            event = {
+                "turn": self.state.turn_counter,
+                "event": event_type,
+                **details
+            }
+            self.game_log.append(event)
     
     def start_game(self, deck: list[Card], commander: Optional[Card] = None):
         """
@@ -331,7 +343,38 @@ class GameEngine:
             print(f"   Battlefield: {len(self.state.battlefield)} permanents")
             print(f"   Hand: {len(self.state.hand)} cards")
             print(f"   Library: {len(self.state.library)} cards")
-    
+
+        # UPDATE STATS (Monte Carlo)
+        # Turn 4 Mana ends -> capture state
+        if self.state.turn_counter == 5: 
+             # We just finished Turn 4 (counter increments at end of loop).
+             # Calculate available mana sources
+             lands = len([c for c in self.state.battlefield if c.is_land])
+             rocks = len([c for c in self.state.battlefield if "MANA_ROCK" in c.tags])
+             self._mc_stats["mana_turn_4"] = lands + rocks
+             self._mc_stats["lands_turn_4"] = lands
+        
+        # Empty Hand Check
+        if not self.state.hand and self._mc_stats["hand_empty_turn"] is None:
+             self._mc_stats["hand_empty_turn"] = self.state.turn_counter - 1
+
+    def run_simulation(self, turns: int = 20) -> dict:
+        """
+        Run a full simulation and return results.
+        
+        Args:
+            turns: Number of turns to simulate
+            
+        Returns:
+            Dictionary with simulation summary
+        """
+        self.run_turns(turns)
+        
+        # Finalize stats
+        self._mc_stats["final_turn"] = self.state.turn_counter - 1
+        self._mc_stats["final_lands"] = len([c for c in self.state.battlefield if c.is_land])
+        
+        return self._mc_stats    
     def _check_enters_tapped(self, card: Card) -> bool:
         """
         Check if a land enters tapped based on game state.
@@ -425,11 +468,19 @@ class GameEngine:
                 # Check eligibility
                 # Logic: Is it valid source?
                 
-                # If played this turn, must check if it entered tapped
-                # ... (rest of logic) ...
+                # CRITICAL: Fetch Lands (Evolving Wilds) generally do NOT produce mana.
+                if "FETCH_LAND" in land.tags:
+                    continue
+                
+                # Check if it entered tapped this turn (e.g. Fetched Land, Evolving Wilds itself)
+                # We must check ALL cards played this turn, not just property land_played_this_turn
+                if land in self.state.cards_played_this_turn and "TAPPED_ENTRY" in land.tags:
+                     continue
+                     
+                # Fallback: Special check for the played land if tags missing for some reason (shouldn't happen with updated logic)
                 if land == self.state.land_played_this_turn:
                      if self._check_enters_tapped(land):
-                         continue
+                          continue
                 
                 untapped_lands.append(land)
         
@@ -515,7 +566,93 @@ class GameEngine:
             
             # Break conditions
             if not mana_added_this_loop and not spell_cast_this_loop:
+                # Try to crack Fetch Lands before giving up?
+                # This could change available mana (unlikely, usually fetch land enters tapped)
+                # But it changes deck composition (shuffle).
+                if self._resolve_fetch_lands(tapped_objects):
+                    # If we fetched, state changed (new land on battlefield).
+                    # Loop again to see if we can use the new land (unlikely if tapped, but safe to loop).
+                    continue
+                
                 break
+    
+    def _resolve_fetch_lands(self, tapped_objects: set) -> bool:
+        """
+        Check for and resolve available Fetch Lands (Evolving Wilds, etc.).
+        
+        Returns:
+            True if a fetch occurred (state changed).
+        """
+        # Find potential fetch lands on battlefield
+        fetchers = [c for c in self.state.battlefield if "FETCH_LAND" in c.tags]
+        
+        for fetcher in fetchers:
+            # Check availability
+            
+            # Case 1: Activated Ability ("{T}, Sacrifice...")
+            # Evolving Wilds, Terramorphic Expanse
+            if "{T}" in fetcher.oracle_text:
+                if id(fetcher) in tapped_objects:
+                    continue # Already used or tapped
+                if fetcher == self.state.land_played_this_turn and "TAPPED_ENTRY" in fetcher.tags:
+                    continue # Enters tapped, cannot use {T} ability yet
+            
+            # Case 2: Triggered Ability ("When ... enters ... sacrifice it")
+            # Brokers Hideout, Riveteers Overlook, etc.
+            # Implicitly happens immediately upon entry. 
+            # If it's on the battlefield, we haven't sacced it yet. do it now.
+            
+            # ACTION: Crack the fetch
+            
+            # 1. Sacrifice (Remove from battlefield, add to graveyard)
+            self.state.battlefield.remove(fetcher)
+            self.state.graveyard.append(fetcher)
+            
+            # 2. Search Library Logic
+            # Heuristic: Find first "Basic" "Land".
+            # If none, find any "Basic Land" (logic: greedy, just get a land).
+            target_land = None
+            for card in self.state.library:
+                if card.is_land and ("Basic" in card.type_line or any(x in card.type_line for x in ["Mountain", "Island", "Plains", "Swamp", "Forest"])):
+                     target_land = card
+                     break
+            
+            if target_land:
+                # 3. Move target to battlefield (TAPPED)
+                self.state.library.remove(target_land)
+                self.state.battlefield.append(target_land)
+                self.state.cards_played_this_turn.append(target_land) # Summoning sickness / Tapped logic
+                
+                # Force TAPPED_ENTRY tag effectively for this turn
+                # (Engine checks cards_played_this_turn. If it has TAPPED_ENTRY tag, it's tapped.
+                # If basic land doesn't have tag, it might seem untapped?)
+                # We need to track that it entered tapped. 
+                # Simplest: Add TAPPED_ENTRY tag to the *instance* (Card is Pydantic, mutable in our flow).
+                if "TAPPED_ENTRY" not in target_land.tags:
+                    target_land.tags.append("TAPPED_ENTRY")
+                
+                # 4. Shuffle
+                import random
+                # random.seed(None) # Already reset at start
+                random.shuffle(self.state.library)
+                
+                # Log
+                self._log_event("activate_ability", {
+                    "card": fetcher.name,
+                    "effect": f"Fetched {target_land.name}",
+                    "shuffle": True
+                })
+                if self.verbose:
+                    print(f"   🌪️ Cracked {fetcher.name} -> Fetched {target_land.name} (tapped)")
+                
+                return True # State changed, restart loop
+            else:
+                 # Failed to find basic land?
+                 if self.verbose:
+                     print(f"   ⚠️ Cracked {fetcher.name} but found no Basic Land!")
+                 return True # Still state changed (sacrificed)
+                 
+        return False
     
     def run_turns(self, n: int):
         """
